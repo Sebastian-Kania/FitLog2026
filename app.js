@@ -55,29 +55,91 @@ class SilovaAktivita extends SportovniAktivita {
     }
 }
 // --- TESTOVÁNÍ A POLYMORFISMUS (FÁZE 2) ---
-const TESTOVACI_VAHA = 85; // kg
-const seznamZaznamu = [];
-// Mechanismus "oživení" objektů ze surových dat z data.ts
-KATALOG_AKTIVIT.forEach((polozka) => {
-    try {
-        if (polozka.typ === "kardio") {
-            // Simulujeme uživatelský vstup 30 minut
-            seznamZaznamu.push(new KardioAktivita(polozka.id, polozka.nazev, polozka.met, 30));
-        }
-        else {
-            // Simulujeme uživatelský vstup 4 série
-            seznamZaznamu.push(new SilovaAktivita(polozka.id, polozka.nazev, polozka.met, 4));
-        }
-    }
-    catch (error) {
-        console.error("Chyba při validaci objektu:", error);
+// --- UI LOGIKA A PROPOJENÍ S DOM (FÁZE 3) ---
+// Pole pro ukládání tréninků, které uživatel reálně zadá přes web
+const denik = [];
+let vahaUzivatele = 85; // Výchozí váha
+// Načtení prvků z HTML stránky
+const form = document.getElementById('fit-form');
+const selectAktivita = document.getElementById('aktivita');
+const vahaInput = document.getElementById('vaha');
+const mnozstviInput = document.getElementById('mnozstvi');
+const labelMnozstvi = document.getElementById('label-mnozstvi');
+const tabulkaBody = document.querySelector('#tabulka-vysledku tbody');
+const celkemKcalEl = document.getElementById('celkem-kcal');
+// 1. Automatické naplnění výběru sportů z data.ts
+if (selectAktivita) {
+    KATALOG_AKTIVIT.forEach(akt => {
+        const opt = document.createElement('option');
+        opt.value = akt.id.toString();
+        opt.textContent = akt.nazev;
+        selectAktivita.appendChild(opt);
+    });
+}
+// 2. Dynamická změna textu (Doba vs Série) podle vybraného sportu
+selectAktivita?.addEventListener('change', () => {
+    const id = parseInt(selectAktivita.value);
+    const data = KATALOG_AKTIVIT.find(a => a.id === id);
+    if (data) {
+        labelMnozstvi.textContent = data.typ === 'kardio' ? 'Doba (minuty):' : 'Počet sérií:';
     }
 });
-// Výpis do konzole pro ověření funkčnosti
-console.log("%c--- FITNESS KALKULAČKA: TEST FÁZE 2 ---", "color: #007bff; font-weight: bold; font-size: 14px;");
-seznamZaznamu.forEach(aktivita => {
-    console.log(`Aktivita: ${aktivita.getNazev()}`);
-    console.log(`- Typ třídy: ${aktivita.constructor.name}`);
-    console.log(`- Odhadovaný výdej: ${aktivita.vypoctiKalorie(TESTOVACI_VAHA)} kcal`);
-    console.log("---------------------------------------");
+// 3. Zpracování formuláře při kliknutí na tlačítko
+form?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    vahaUzivatele = parseFloat(vahaInput.value);
+    const id = parseInt(selectAktivita.value);
+    const mnozstvi = parseInt(mnozstviInput.value);
+    const data = KATALOG_AKTIVIT.find(a => a.id === id);
+    if (data) {
+        try {
+            let novaAkt;
+            // Oživování objektů na základě vstupu z formuláře
+            if (data.typ === 'kardio') {
+                novaAkt = new KardioAktivita(data.id, data.nazev, data.met, mnozstvi);
+            }
+            else {
+                novaAkt = new SilovaAktivita(data.id, data.nazev, data.met, mnozstvi);
+            }
+            denik.push(novaAkt);
+            vykresliTabulku();
+            // Vyčištění políčka pro množství, váhu a sport necháme vybrané
+            mnozstviInput.value = '';
+        }
+        catch (error) {
+            alert(`Chyba validace: ${error.message}`);
+        }
+    }
 });
+// 4. Vykreslení výsledků do HTML tabulky bez přebíjení stránky
+function vykresliTabulku() {
+    if (!tabulkaBody || !celkemKcalEl)
+        return;
+    tabulkaBody.innerHTML = '';
+    let sumaKcal = 0;
+    denik.forEach((akt, index) => {
+        const kcal = akt.vypoctiKalorie(vahaUzivatele);
+        sumaKcal += kcal;
+        // Zjistíme, zda jde o minuty nebo série, abychom to správně vypsali
+        const jednotka = akt instanceof KardioAktivita ? 'min' : 'sérií';
+        // Pomocí triku v TypeScriptu vytáhneme hodnotu z private vlastnosti pro zobrazení
+        const hodnota = akt.dobaTrvaniMinut || akt.pocetSerii || 0;
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td><strong>${akt.getNazev()}</strong></td>
+            <td>${hodnota} ${jednotka}</td>
+            <td><span style="color: #2563eb; font-weight: 600;">${kcal} kcal</span></td>
+            <td><button class="btn-smazat" data-index="${index}" style="background:#ef4444; color:white; border:none; padding:3px 8px; border-radius:4px; cursor:pointer;">Smazat</button></td>
+        `;
+        tabulkaBody.appendChild(tr);
+    });
+    celkemKcalEl.textContent = `${sumaKcal} kcal`;
+    // Aktivace tlačítek pro smazání řádku
+    document.querySelectorAll('.btn-smazat').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const idx = parseInt(e.target.dataset.index);
+            denik.splice(idx, 1);
+            vykresliTabulku();
+        });
+    });
+}
