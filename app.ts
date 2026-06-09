@@ -60,18 +60,23 @@ class SilovaAktivita extends SportovniAktivita {
 
 // --- UI LOGIKA A PROPOJENÍ S DOM (FÁZE 3) ---
 
-// Pole pro ukládání tréninků, které uživatel reálně zadá přes web
+// --- UI LOGIKA A PROPOJENÍ S DOM (FÁZE 3 S GRAFEM) ---
+
 const denik: SportovniAktivita[] = [];
-let vahaUzivatele: number = 85; // Výchozí váha
+let vahaUzivatele: number = 85;
 
 // Načtení prvků z HTML stránky
 const form = document.getElementById('fit-form') as HTMLFormElement;
 const selectAktivita = document.getElementById('aktivita') as HTMLSelectElement;
 const vahaInput = document.getElementById('vaha') as HTMLInputElement;
+const cilInput = document.getElementById('cil-kcal') as HTMLInputElement; // Nové
 const mnozstviInput = document.getElementById('mnozstvi') as HTMLInputElement;
 const labelMnozstvi = document.getElementById('label-mnozstvi') as HTMLLabelElement;
 const tabulkaBody = document.querySelector('#tabulka-vysledku tbody') as HTMLElement;
 const celkemKcalEl = document.getElementById('celkem-kcal') as HTMLElement;
+const vystupCilEl = document.getElementById('vystup-cil') as HTMLElement; // Nové
+const kruhovyGraf = document.getElementById('kruhovy-graf') as HTMLDivElement; // Nové
+const procentaText = document.getElementById('procenta-text') as HTMLSpanElement; // Nové
 
 // 1. Automatické naplnění výběru sportů z data.ts
 if (selectAktivita) {
@@ -82,6 +87,12 @@ if (selectAktivita) {
         selectAktivita.appendChild(opt);
     });
 }
+
+// Při změně políčka s cílem hned aktualizujeme text pod grafem
+cilInput?.addEventListener('input', () => {
+    if (vystupCilEl) vystupCilEl.textContent = `${cilInput.value} kcal`;
+    vykresliTabulku(); // Přepočítat graf
+});
 
 // 2. Dynamická změna textu (Doba vs Série) podle vybraného sportu
 selectAktivita?.addEventListener('change', () => {
@@ -105,7 +116,6 @@ form?.addEventListener('submit', (e) => {
         try {
             let novaAkt: SportovniAktivita;
             
-            // Oživování objektů na základě vstupu z formuláře
             if (data.typ === 'kardio') {
                 novaAkt = new KardioAktivita(data.id, data.nazev, data.met, mnozstvi);
             } else {
@@ -115,7 +125,6 @@ form?.addEventListener('submit', (e) => {
             denik.push(novaAkt);
             vykresliTabulku();
             
-            // Vyčištění políčka pro množství, váhu a sport necháme vybrané
             mnozstviInput.value = '';
         } catch (error: any) {
             alert(`Chyba validace: ${error.message}`);
@@ -123,9 +132,9 @@ form?.addEventListener('submit', (e) => {
     }
 });
 
-// 4. Vykreslení výsledků do HTML tabulky bez přebíjení stránky
+// 4. Vykreslení výsledků a AKTUALIZACE GRAFU
 function vykresliTabulku() {
-    if (!tabulkaBody || !celkemKcalEl) return;
+    if (!tabulkaBody || !celkemKcalEl || !kruhovyGraf || !procentaText || !cilInput) return;
     
     tabulkaBody.innerHTML = '';
     let sumaKcal = 0;
@@ -134,9 +143,7 @@ function vykresliTabulku() {
         const kcal = akt.vypoctiKalorie(vahaUzivatele);
         sumaKcal += kcal;
 
-        // Zjistíme, zda jde o minuty nebo série, abychom to správně vypsali
         const jednotka = akt instanceof KardioAktivita ? 'min' : 'sérií';
-        // Pomocí triku v TypeScriptu vytáhneme hodnotu z private vlastnosti pro zobrazení
         const hodnota = (akt as any).dobaTrvaniMinut || (akt as any).pocetSerii || 0;
 
         const tr = document.createElement('tr');
@@ -149,7 +156,19 @@ function vykresliTabulku() {
         tabulkaBody.appendChild(tr);
     });
 
+    // Aktualizace textových hodnot
     celkemKcalEl.textContent = `${sumaKcal} kcal`;
+    const denniCil = parseFloat(cilInput.value) || 1; // Ošetření dělení nulou
+
+    // VÝPOČET PROCENT A GRAFU
+    const procenta = Math.min(Math.round((sumaKcal / denniCil) * 100), 100);
+    procentaText.textContent = `${procenta}%`;
+
+    // Přepočet procent na stupně kruhu (360 stupňů = 100 %)
+    const stupne = (procenta / 100) * 360;
+    
+    // Změna CSS vlastnosti za běhu (vybarvíme kruh modře do výše splněných stupňů)
+    kruhovyGraf.style.background = `conic-gradient(#2563eb ${stupne}deg, #e2e8f0 ${stupne}deg)`;
 
     // Aktivace tlačítek pro smazání řádku
     document.querySelectorAll('.btn-smazat').forEach(btn => {

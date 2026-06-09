@@ -56,17 +56,21 @@ class SilovaAktivita extends SportovniAktivita {
 }
 // --- TESTOVÁNÍ A POLYMORFISMUS (FÁZE 2) ---
 // --- UI LOGIKA A PROPOJENÍ S DOM (FÁZE 3) ---
-// Pole pro ukládání tréninků, které uživatel reálně zadá přes web
+// --- UI LOGIKA A PROPOJENÍ S DOM (FÁZE 3 S GRAFEM) ---
 const denik = [];
-let vahaUzivatele = 85; // Výchozí váha
+let vahaUzivatele = 85;
 // Načtení prvků z HTML stránky
 const form = document.getElementById('fit-form');
 const selectAktivita = document.getElementById('aktivita');
 const vahaInput = document.getElementById('vaha');
+const cilInput = document.getElementById('cil-kcal'); // Nové
 const mnozstviInput = document.getElementById('mnozstvi');
 const labelMnozstvi = document.getElementById('label-mnozstvi');
 const tabulkaBody = document.querySelector('#tabulka-vysledku tbody');
 const celkemKcalEl = document.getElementById('celkem-kcal');
+const vystupCilEl = document.getElementById('vystup-cil'); // Nové
+const kruhovyGraf = document.getElementById('kruhovy-graf'); // Nové
+const procentaText = document.getElementById('procenta-text'); // Nové
 // 1. Automatické naplnění výběru sportů z data.ts
 if (selectAktivita) {
     KATALOG_AKTIVIT.forEach(akt => {
@@ -76,6 +80,12 @@ if (selectAktivita) {
         selectAktivita.appendChild(opt);
     });
 }
+// Při změně políčka s cílem hned aktualizujeme text pod grafem
+cilInput?.addEventListener('input', () => {
+    if (vystupCilEl)
+        vystupCilEl.textContent = `${cilInput.value} kcal`;
+    vykresliTabulku(); // Přepočítat graf
+});
 // 2. Dynamická změna textu (Doba vs Série) podle vybraného sportu
 selectAktivita?.addEventListener('change', () => {
     const id = parseInt(selectAktivita.value);
@@ -94,7 +104,6 @@ form?.addEventListener('submit', (e) => {
     if (data) {
         try {
             let novaAkt;
-            // Oživování objektů na základě vstupu z formuláře
             if (data.typ === 'kardio') {
                 novaAkt = new KardioAktivita(data.id, data.nazev, data.met, mnozstvi);
             }
@@ -103,7 +112,6 @@ form?.addEventListener('submit', (e) => {
             }
             denik.push(novaAkt);
             vykresliTabulku();
-            // Vyčištění políčka pro množství, váhu a sport necháme vybrané
             mnozstviInput.value = '';
         }
         catch (error) {
@@ -111,18 +119,16 @@ form?.addEventListener('submit', (e) => {
         }
     }
 });
-// 4. Vykreslení výsledků do HTML tabulky bez přebíjení stránky
+// 4. Vykreslení výsledků a AKTUALIZACE GRAFU
 function vykresliTabulku() {
-    if (!tabulkaBody || !celkemKcalEl)
+    if (!tabulkaBody || !celkemKcalEl || !kruhovyGraf || !procentaText || !cilInput)
         return;
     tabulkaBody.innerHTML = '';
     let sumaKcal = 0;
     denik.forEach((akt, index) => {
         const kcal = akt.vypoctiKalorie(vahaUzivatele);
         sumaKcal += kcal;
-        // Zjistíme, zda jde o minuty nebo série, abychom to správně vypsali
         const jednotka = akt instanceof KardioAktivita ? 'min' : 'sérií';
-        // Pomocí triku v TypeScriptu vytáhneme hodnotu z private vlastnosti pro zobrazení
         const hodnota = akt.dobaTrvaniMinut || akt.pocetSerii || 0;
         const tr = document.createElement('tr');
         tr.innerHTML = `
@@ -133,7 +139,16 @@ function vykresliTabulku() {
         `;
         tabulkaBody.appendChild(tr);
     });
+    // Aktualizace textových hodnot
     celkemKcalEl.textContent = `${sumaKcal} kcal`;
+    const denniCil = parseFloat(cilInput.value) || 1; // Ošetření dělení nulou
+    // VÝPOČET PROCENT A GRAFU
+    const procenta = Math.min(Math.round((sumaKcal / denniCil) * 100), 100);
+    procentaText.textContent = `${procenta}%`;
+    // Přepočet procent na stupně kruhu (360 stupňů = 100 %)
+    const stupne = (procenta / 100) * 360;
+    // Změna CSS vlastnosti za běhu (vybarvíme kruh modře do výše splněných stupňů)
+    kruhovyGraf.style.background = `conic-gradient(#2563eb ${stupne}deg, #e2e8f0 ${stupne}deg)`;
     // Aktivace tlačítek pro smazání řádku
     document.querySelectorAll('.btn-smazat').forEach(btn => {
         btn.addEventListener('click', (e) => {
